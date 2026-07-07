@@ -1,4 +1,4 @@
-using FCG.CatalogAPI.Application.Events;
+using FCG.Contracts.Events;
 using FCG.CatalogAPI.Application.Games.Commands.CreateGame;
 using FCG.CatalogAPI.Domain.Entities;
 using FCG.CatalogAPI.Domain.Interfaces;

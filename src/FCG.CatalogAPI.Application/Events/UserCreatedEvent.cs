@@ -1,3 +1,3 @@
-namespace FCG.CatalogAPI.Application.Events;
+namespace FCG.Contracts.Events;
 
 public record UserCreatedEvent(Guid UserId, string Name, string Email);

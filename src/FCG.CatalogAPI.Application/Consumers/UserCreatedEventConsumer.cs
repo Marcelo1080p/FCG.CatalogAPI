@@ -1,4 +1,4 @@
-using FCG.CatalogAPI.Application.Events;
+using FCG.Contracts.Events;
 using MassTransit;
 using Microsoft.Extensions.Logging;
 
