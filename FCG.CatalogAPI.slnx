@@ -5,4 +5,7 @@
     <Project Path="src/FCG.CatalogAPI.Domain/FCG.CatalogAPI.Domain.csproj" />
     <Project Path="src/FCG.CatalogAPI.Infrastructure/FCG.CatalogAPI.Infrastructure.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/FCG.CatalogAPI.Tests/FCG.CatalogAPI.Tests.csproj" />
+  </Folder>
 </Solution>
