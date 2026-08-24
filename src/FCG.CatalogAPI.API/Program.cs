@@ -1,5 +1,7 @@
 using FCG.CatalogAPI.Application.Consumers;
+using FCG.CatalogAPI.Application.Interfaces;
 using FCG.CatalogAPI.Domain.Interfaces;
+using FCG.CatalogAPI.Infrastructure.Caching;
 using FCG.CatalogAPI.Infrastructure.Persistence;
 using FCG.CatalogAPI.Infrastructure.Persistence.Repositories;
 using MassTransit;
@@ -16,6 +18,14 @@ builder.Services.AddDbContext<AppDbContext>(opt =>
 
 builder.Services.AddScoped<IGameRepository, GameRepository>();
 builder.Services.AddScoped<IUserGameRepository, UserGameRepository>();
+
+builder.Services.AddStackExchangeRedisCache(opt =>
+{
+    opt.Configuration = builder.Configuration.GetConnectionString("Redis");
+    opt.InstanceName = "fcg-catalog:";
+});
+
+builder.Services.AddScoped<ICacheService, RedisCacheService>();
 
 builder.Services.AddMediatR(cfg =>
     cfg.RegisterServicesFromAssembly(
@@ -64,11 +74,10 @@ builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "FCG.CatalogAPI", Version = "v1" });
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        In = ParameterLocation.Header,
-        Description = "Informe o token JWT: Bearer {token}",
         Name = "Authorization",
-        Type = SecuritySchemeType.ApiKey,
-        Scheme = "Bearer"
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT"
     });
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
