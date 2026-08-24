@@ -1,5 +1,7 @@
 using FCG.CatalogAPI.Application.Consumers;
+using FCG.CatalogAPI.Application.Interfaces;
 using FCG.CatalogAPI.Domain.Interfaces;
+using FCG.CatalogAPI.Infrastructure.Caching;
 using FCG.CatalogAPI.Infrastructure.Persistence;
 using FCG.CatalogAPI.Infrastructure.Persistence.Repositories;
 using MassTransit;
@@ -16,6 +18,14 @@ builder.Services.AddDbContext<AppDbContext>(opt =>
 
 builder.Services.AddScoped<IGameRepository, GameRepository>();
 builder.Services.AddScoped<IUserGameRepository, UserGameRepository>();
+
+builder.Services.AddStackExchangeRedisCache(opt =>
+{
+    opt.Configuration = builder.Configuration.GetConnectionString("Redis");
+    opt.InstanceName = "fcg-catalog:";
+});
+
+builder.Services.AddScoped<ICacheService, RedisCacheService>();
 
 builder.Services.AddMediatR(cfg =>
     cfg.RegisterServicesFromAssembly(
