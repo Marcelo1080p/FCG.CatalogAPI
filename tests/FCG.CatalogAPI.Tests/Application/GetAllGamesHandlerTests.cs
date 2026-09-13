@@ -11,6 +11,7 @@ namespace FCG.CatalogAPI.Tests.Application;
 public class GetAllGamesHandlerTests
 {
     private readonly IGameRepository _gameRepo = Substitute.For<IGameRepository>();
+    private readonly IReviewRepository _reviewRepo = Substitute.For<IReviewRepository>();
     private readonly ICacheService _cache = Substitute.For<ICacheService>();
     private readonly GetAllGamesQueryHandler _handler;
 
@@ -20,7 +21,7 @@ public class GetAllGamesHandlerTests
         _cache.GetAsync<IList<GameDto>>(CacheKeys.AllGames, Arg.Any<CancellationToken>())
               .Returns((IList<GameDto>?)null);
 
-        _handler = new GetAllGamesQueryHandler(_gameRepo, _cache);
+        _handler = new GetAllGamesQueryHandler(_gameRepo, _reviewRepo, _cache);
     }
 
     [Fact]
@@ -93,5 +94,33 @@ public class GetAllGamesHandlerTests
 
         Assert.True(result.IsSuccess);
         Assert.Empty(result.Value!);
+    }
+
+    [Fact]
+    public async Task Handle_ShouldExposeAverageRating_FromReviewRepository()
+    {
+        var game = Game.Create("Jogo avaliado", "Descrição", 80m);
+        _gameRepo.GetAllAsync().Returns(new List<Game> { game });
+        _reviewRepo.GetRatingsAsync(Arg.Any<IEnumerable<Guid>>(), Arg.Any<CancellationToken>())
+                   .Returns(new Dictionary<Guid, GameRating>
+                   {
+                       [game.Id] = new GameRating(game.Id, 4.5, 2)
+                   });
+
+        var result = await _handler.Handle(new GetAllGamesQuery(), CancellationToken.None);
+
+        Assert.Equal(4.5, result.Value![0].AverageRating);
+        Assert.Equal(2, result.Value![0].ReviewCount);
+    }
+
+    [Fact]
+    public async Task Handle_ShouldReturnNullRating_WhenGameHasNoReviews()
+    {
+        _gameRepo.GetAllAsync().Returns(new List<Game> { Game.Create("Sem avaliação", "Descrição", 10m) });
+
+        var result = await _handler.Handle(new GetAllGamesQuery(), CancellationToken.None);
+
+        Assert.Null(result.Value![0].AverageRating);
+        Assert.Equal(0, result.Value![0].ReviewCount);
     }
 }
