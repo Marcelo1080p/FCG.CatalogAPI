@@ -8,3 +8,4 @@ data:
   Jwt__Issuer: "FCG.UsersAPI"
   Jwt__Audience: "FCG"
   Jwt__ExpirationMinutes: "60"
+  MongoDb__Database: "FCG_CatalogDB"

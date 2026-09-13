@@ -9,11 +9,16 @@ namespace FCG.CatalogAPI.Application.Games.Queries.GetGameById;
 public class GetGameByIdQueryHandler : IRequestHandler<GetGameByIdQuery, Result<GameDto>>
 {
     private readonly IGameRepository _gameRepository;
+    private readonly IReviewRepository _reviewRepository;
     private readonly ICacheService _cache;
 
-    public GetGameByIdQueryHandler(IGameRepository gameRepository, ICacheService cache)
+    public GetGameByIdQueryHandler(
+        IGameRepository gameRepository,
+        IReviewRepository reviewRepository,
+        ICacheService cache)
     {
         _gameRepository = gameRepository;
+        _reviewRepository = reviewRepository;
         _cache = cache;
     }
 
@@ -29,7 +34,10 @@ public class GetGameByIdQueryHandler : IRequestHandler<GetGameByIdQuery, Result<
         if (game is null)
             return Result<GameDto>.Failure("Jogo não encontrado.");
 
-        var dto = GameDto.FromEntity(game);
+        var ratings = await _reviewRepository.GetRatingsAsync(new[] { game.Id }, cancellationToken);
+        ratings.TryGetValue(game.Id, out var rating);
+
+        var dto = GameDto.FromEntity(game, rating);
         await _cache.SetAsync(key, dto, cancellationToken: cancellationToken);
 
         return Result<GameDto>.Success(dto);

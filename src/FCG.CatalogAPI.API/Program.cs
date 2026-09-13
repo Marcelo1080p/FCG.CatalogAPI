@@ -3,12 +3,14 @@ using FCG.CatalogAPI.Application.Interfaces;
 using FCG.CatalogAPI.Domain.Interfaces;
 using FCG.CatalogAPI.Infrastructure.Caching;
 using FCG.CatalogAPI.Infrastructure.Persistence;
+using FCG.CatalogAPI.Infrastructure.Persistence.Mongo;
 using FCG.CatalogAPI.Infrastructure.Persistence.Repositories;
 using MassTransit;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using MongoDB.Driver;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -26,6 +28,12 @@ builder.Services.AddStackExchangeRedisCache(opt =>
 });
 
 builder.Services.AddScoped<ICacheService, RedisCacheService>();
+
+var mongoSettings = builder.Configuration.GetSection("MongoDb").Get<MongoDbSettings>()!;
+builder.Services.AddSingleton<IMongoClient>(_ => new MongoClient(mongoSettings.ConnectionString));
+builder.Services.AddScoped(sp =>
+    sp.GetRequiredService<IMongoClient>().GetDatabase(mongoSettings.Database));
+builder.Services.AddScoped<IReviewRepository, MongoReviewRepository>();
 
 builder.Services.AddMediatR(cfg =>
     cfg.RegisterServicesFromAssembly(
@@ -97,6 +105,14 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.Migrate();
+
+    // Indice por jogo: as avaliacoes sao sempre consultadas e agregadas por GameId.
+    var reviews = scope.ServiceProvider
+        .GetRequiredService<IMongoDatabase>()
+        .GetCollection<ReviewDocument>(MongoReviewRepository.CollectionName);
+
+    reviews.Indexes.CreateOne(new CreateIndexModel<ReviewDocument>(
+        Builders<ReviewDocument>.IndexKeys.Ascending(r => r.GameId)));
 }
 
 app.UseSwagger();
