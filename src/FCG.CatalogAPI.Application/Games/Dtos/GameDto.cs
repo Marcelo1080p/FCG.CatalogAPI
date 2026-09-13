@@ -10,9 +10,11 @@ public record GameDto(
     decimal DiscountPercentage,
     decimal FinalPrice,
     bool IsActive,
-    DateTime CreatedAt)
+    DateTime CreatedAt,
+    double? AverageRating,
+    int ReviewCount)
 {
-    public static GameDto FromEntity(Game game) => new(
+    public static GameDto FromEntity(Game game, GameRating? rating = null) => new(
         game.Id,
         game.Title,
         game.Description,
@@ -20,5 +22,7 @@ public record GameDto(
         game.DiscountPercentage,
         game.FinalPrice,
         game.IsActive,
-        game.CreatedAt);
+        game.CreatedAt,
+        rating?.Average,
+        rating?.Count ?? 0);
 }

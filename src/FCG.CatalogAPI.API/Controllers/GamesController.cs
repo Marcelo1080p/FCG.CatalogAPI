@@ -5,6 +5,8 @@ using FCG.CatalogAPI.Application.Games.Commands.DeleteGame;
 using FCG.CatalogAPI.Application.Games.Commands.UpdateGame;
 using FCG.CatalogAPI.Application.Games.Queries.GetAllGames;
 using FCG.CatalogAPI.Application.Games.Queries.GetGameById;
+using FCG.CatalogAPI.Application.Reviews.Commands.CreateReview;
+using FCG.CatalogAPI.Application.Reviews.Queries.GetGameReviews;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -79,8 +81,33 @@ public class GamesController : ControllerBase
         var result = await _mediator.Send(new AcquireGameCommand(userId, id));
         return result.IsSuccess ? Ok(new { orderId = result.Value }) : BadRequest(result.Error);
     }
+
+    [HttpGet("{id:guid}/reviews")]
+    public async Task<IActionResult> GetReviews(Guid id)
+    {
+        var result = await _mediator.Send(new GetGameReviewsQuery(id));
+        return result.IsSuccess ? Ok(result.Value) : NotFound(result.Error);
+    }
+
+    [HttpPost("{id:guid}/reviews")]
+    [Authorize]
+    public async Task<IActionResult> CreateReview(Guid id, [FromBody] CreateReviewRequest req)
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(userIdClaim, out var userId))
+            return Unauthorized();
+
+        var result = await _mediator.Send(
+            new CreateReviewCommand(id, userId, req.Rating, req.Comment, req.Tags));
+
+        if (!result.IsSuccess)
+            return BadRequest(result.Error);
+
+        return CreatedAtAction(nameof(GetReviews), new { id }, new { reviewId = result.Value });
+    }
 }
 
 public record CreateGameRequest(string Title, string Description, decimal Price);
 public record UpdateGameRequest(string Title, string Description, decimal Price);
 public record ApplyDiscountRequest(decimal Percentage);
+public record CreateReviewRequest(int Rating, string? Comment, string[]? Tags);
