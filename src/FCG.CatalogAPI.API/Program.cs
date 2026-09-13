@@ -11,6 +11,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using MongoDB.Driver;
+using Prometheus;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -117,8 +118,16 @@ using (var scope = app.Services.CreateScope())
 
 app.UseSwagger();
 app.UseSwaggerUI();
+app.UseRouting();
+
+// Coleta duracao, total e status code de cada requisicao HTTP.
+app.UseHttpMetrics();
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+
+// Endpoint consumido pelo Prometheus.
+app.MapMetrics();
 
 app.Run();
