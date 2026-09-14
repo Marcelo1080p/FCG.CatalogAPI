@@ -17,9 +17,12 @@ src/
 ```
 
 - **.NET 8** / ASP.NET Core
-- **EF Core 8** + SQL Server
+- **EF Core 8** + SQL Server — catálogo, aquisições
+- **MongoDB** — avaliações dos jogos (dados flexíveis, com tags)
+- **Redis** — cache distribuído do catálogo
 - **MassTransit** + RabbitMQ (mensageria)
 - **MediatR** (CQRS)
+- **prometheus-net** (métricas)
 - **JWT Bearer** (valida tokens emitidos pelo FCG.UsersAPI)
 
 ## Endpoints
@@ -33,6 +36,9 @@ src/
 | DELETE | `/api/games/{id}` | Admin | Desativa jogo |
 | PATCH | `/api/games/{id}/discount` | Admin | Aplica desconto (0–100%) |
 | POST | `/api/games/{id}/acquire` | Autenticado | Adquire jogo e publica `OrderPlacedEvent` |
+| GET | `/api/games/{id}/reviews` | Pública | Lista as avaliações do jogo |
+| POST | `/api/games/{id}/reviews` | Autenticado | Avalia o jogo (nota 1–5, comentário e tags) |
+| GET | `/metrics` | Pública | Métricas no formato Prometheus |
 
 ## Eventos
 
@@ -52,6 +58,30 @@ src/
 | `RabbitMQ__Host` | Host do RabbitMQ | `localhost` |
 | `RabbitMQ__Username` | Usuário do RabbitMQ | `guest` |
 | `RabbitMQ__Password` | Senha do RabbitMQ | `guest` |
+| `ConnectionStrings__Redis` | Servidor Redis usado como cache | `localhost:6379` |
+| `MongoDb__ConnectionString` | Servidor MongoDB das avaliações | `mongodb://localhost:27017` |
+| `MongoDb__Database` | Banco das avaliações | `FCG_CatalogDB` |
+
+
+## Persistência poliglota
+
+O serviço usa três tecnologias de armazenamento, cada uma no que faz melhor:
+
+| Tecnologia | Uso |
+|---|---|
+| **SQL Server** | Jogos e aquisições — dados relacionais, com integridade referencial |
+| **MongoDB** | Avaliações — documentos flexíveis, com arrays de tags sem tabela de junção |
+| **Redis** | Cache do catálogo, com expiração de 5 minutos |
+
+Uma requisição a `GET /api/games` combina as três: o SQL Server devolve os jogos, o MongoDB calcula as notas médias por agregação (`$match` + `$group`, em uma única consulta para todo o catálogo) e o resultado combinado é guardado no Redis.
+
+O cache é invalidado automaticamente sempre que algo altera o catálogo — criar ou editar jogo, aplicar desconto, desativar ou registrar uma nova avaliação —, garantindo que a resposta nunca fique defasada.
+
+Se o Redis estiver indisponível, a requisição segue para o banco em vez de falhar.
+
+## Observabilidade
+
+O endpoint `/metrics` expõe, no formato Prometheus, a duração, o total e o status code de cada requisição HTTP, com rótulos de controller e action. O dashboard do Grafana está no repositório de orquestração.
 
 ## Como executar
 
