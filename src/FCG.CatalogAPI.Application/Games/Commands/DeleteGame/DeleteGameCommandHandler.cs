@@ -8,11 +8,16 @@ namespace FCG.CatalogAPI.Application.Games.Commands.DeleteGame;
 public class DeleteGameCommandHandler : IRequestHandler<DeleteGameCommand, Result<bool>>
 {
     private readonly IGameRepository _gameRepository;
+    private readonly IGameSearchRepository _searchRepository;
     private readonly ICacheService _cache;
 
-    public DeleteGameCommandHandler(IGameRepository gameRepository, ICacheService cache)
+    public DeleteGameCommandHandler(
+        IGameRepository gameRepository,
+        IGameSearchRepository searchRepository,
+        ICacheService cache)
     {
         _gameRepository = gameRepository;
+        _searchRepository = searchRepository;
         _cache = cache;
     }
 
@@ -28,6 +33,8 @@ public class DeleteGameCommandHandler : IRequestHandler<DeleteGameCommand, Resul
             await _gameRepository.UpdateAsync(game);
             await _gameRepository.SaveChangesAsync();
 
+            // O jogo foi desativado: sai do indice para nao aparecer nas buscas.
+            await _searchRepository.RemoveAsync(game.Id, cancellationToken);
             await _cache.RemoveAsync(CacheKeys.AllGames, cancellationToken);
             await _cache.RemoveAsync(CacheKeys.Game(game.Id), cancellationToken);
 

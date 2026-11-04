@@ -8,11 +8,16 @@ namespace FCG.CatalogAPI.Application.Games.Commands.ApplyDiscount;
 public class ApplyDiscountCommandHandler : IRequestHandler<ApplyDiscountCommand, Result<bool>>
 {
     private readonly IGameRepository _gameRepository;
+    private readonly IGameSearchRepository _searchRepository;
     private readonly ICacheService _cache;
 
-    public ApplyDiscountCommandHandler(IGameRepository gameRepository, ICacheService cache)
+    public ApplyDiscountCommandHandler(
+        IGameRepository gameRepository,
+        IGameSearchRepository searchRepository,
+        ICacheService cache)
     {
         _gameRepository = gameRepository;
+        _searchRepository = searchRepository;
         _cache = cache;
     }
 
@@ -28,6 +33,8 @@ public class ApplyDiscountCommandHandler : IRequestHandler<ApplyDiscountCommand,
             await _gameRepository.UpdateAsync(game);
             await _gameRepository.SaveChangesAsync();
 
+            // O preco final mudou: o indice precisa refletir o novo valor.
+            await _searchRepository.IndexAsync(game, cancellationToken);
             await _cache.RemoveAsync(CacheKeys.AllGames, cancellationToken);
             await _cache.RemoveAsync(CacheKeys.Game(game.Id), cancellationToken);
 

@@ -5,11 +5,13 @@ using FCG.CatalogAPI.Infrastructure.Caching;
 using FCG.CatalogAPI.Infrastructure.Persistence;
 using FCG.CatalogAPI.Infrastructure.Persistence.Mongo;
 using FCG.CatalogAPI.Infrastructure.Persistence.Repositories;
+using FCG.CatalogAPI.Infrastructure.Search;
 using MassTransit;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Elastic.Clients.Elasticsearch;
 using MongoDB.Driver;
 using Prometheus;
 using System.Text;
@@ -35,6 +37,12 @@ builder.Services.AddSingleton<IMongoClient>(_ => new MongoClient(mongoSettings.C
 builder.Services.AddScoped(sp =>
     sp.GetRequiredService<IMongoClient>().GetDatabase(mongoSettings.Database));
 builder.Services.AddScoped<IReviewRepository, MongoReviewRepository>();
+
+var searchSettings = builder.Configuration.GetSection("Elasticsearch").Get<ElasticsearchSettings>()!;
+builder.Services.AddSingleton(searchSettings);
+builder.Services.AddSingleton(_ =>
+    new ElasticsearchClient(new Uri(searchSettings.Uri)));
+builder.Services.AddScoped<IGameSearchRepository, ElasticGameSearchRepository>();
 
 builder.Services.AddMediatR(cfg =>
     cfg.RegisterServicesFromAssembly(
@@ -114,6 +122,11 @@ using (var scope = app.Services.CreateScope())
 
     reviews.Indexes.CreateOne(new CreateIndexModel<ReviewDocument>(
         Builders<ReviewDocument>.IndexKeys.Ascending(r => r.GameId)));
+
+    // Garante que o indice de busca exista com o mapeamento correto.
+    var search = (ElasticGameSearchRepository)scope.ServiceProvider
+        .GetRequiredService<IGameSearchRepository>();
+    search.EnsureIndexAsync().GetAwaiter().GetResult();
 }
 
 app.UseSwagger();
