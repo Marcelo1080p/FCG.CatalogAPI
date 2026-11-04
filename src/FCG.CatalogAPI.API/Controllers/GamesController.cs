@@ -5,6 +5,7 @@ using FCG.CatalogAPI.Application.Games.Commands.DeleteGame;
 using FCG.CatalogAPI.Application.Games.Commands.UpdateGame;
 using FCG.CatalogAPI.Application.Games.Queries.GetAllGames;
 using FCG.CatalogAPI.Application.Games.Queries.GetGameById;
+using FCG.CatalogAPI.Application.Games.Queries.SearchGames;
 using FCG.CatalogAPI.Application.Reviews.Commands.CreateReview;
 using FCG.CatalogAPI.Application.Reviews.Queries.GetGameReviews;
 using MediatR;
@@ -27,6 +28,17 @@ public class GamesController : ControllerBase
     {
         var result = await _mediator.Send(new GetAllGamesQuery());
         return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Busca textual no catalogo, tolerante a erros de digitacao e
+    /// ordenada por relevancia.
+    /// </summary>
+    [HttpGet("search")]
+    public async Task<IActionResult> Search([FromQuery] string q, [FromQuery] int size = 20)
+    {
+        var result = await _mediator.Send(new SearchGamesQuery(q, size));
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 
     [HttpGet("{id:guid}")]

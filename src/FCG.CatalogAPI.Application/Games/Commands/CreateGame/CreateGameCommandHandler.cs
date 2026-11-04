@@ -8,11 +8,16 @@ namespace FCG.CatalogAPI.Application.Games.Commands.CreateGame;
 public class CreateGameCommandHandler : IRequestHandler<CreateGameCommand, Result<Guid>>
 {
     private readonly IGameRepository _gameRepository;
+    private readonly IGameSearchRepository _searchRepository;
     private readonly ICacheService _cache;
 
-    public CreateGameCommandHandler(IGameRepository gameRepository, ICacheService cache)
+    public CreateGameCommandHandler(
+        IGameRepository gameRepository,
+        IGameSearchRepository searchRepository,
+        ICacheService cache)
     {
         _gameRepository = gameRepository;
+        _searchRepository = searchRepository;
         _cache = cache;
     }
 
@@ -24,6 +29,7 @@ public class CreateGameCommandHandler : IRequestHandler<CreateGameCommand, Resul
             await _gameRepository.AddAsync(game);
             await _gameRepository.SaveChangesAsync();
 
+            await _searchRepository.IndexAsync(game, cancellationToken);
             await _cache.RemoveAsync(CacheKeys.AllGames, cancellationToken);
 
             return Result<Guid>.Success(game.Id);
