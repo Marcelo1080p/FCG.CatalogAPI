@@ -10,11 +10,12 @@ namespace FCG.CatalogAPI.Tests.Application;
 public class CreateGameHandlerTests
 {
     private readonly IGameRepository _gameRepo = Substitute.For<IGameRepository>();
+    private readonly IGameSearchRepository _searchRepo = Substitute.For<IGameSearchRepository>();
     private readonly ICacheService _cache = Substitute.For<ICacheService>();
     private readonly CreateGameCommandHandler _handler;
 
     public CreateGameHandlerTests()
-        => _handler = new CreateGameCommandHandler(_gameRepo, _cache);
+        => _handler = new CreateGameCommandHandler(_gameRepo, _searchRepo, _cache);
 
     [Fact]
     public async Task Handle_ShouldCreateGame_WhenDataIsValid()

@@ -10,11 +10,12 @@ namespace FCG.CatalogAPI.Tests.Application;
 public class ApplyDiscountHandlerTests
 {
     private readonly IGameRepository _gameRepo = Substitute.For<IGameRepository>();
+    private readonly IGameSearchRepository _searchRepo = Substitute.For<IGameSearchRepository>();
     private readonly ICacheService _cache = Substitute.For<ICacheService>();
     private readonly ApplyDiscountCommandHandler _handler;
 
     public ApplyDiscountHandlerTests()
-        => _handler = new ApplyDiscountCommandHandler(_gameRepo, _cache);
+        => _handler = new ApplyDiscountCommandHandler(_gameRepo, _searchRepo, _cache);
 
     [Fact]
     public async Task Handle_ShouldApplyDiscount_WhenGameExists()
