@@ -20,6 +20,7 @@ src/
 - **EF Core 8** + SQL Server — catálogo, aquisições
 - **MongoDB** — avaliações dos jogos (dados flexíveis, com tags)
 - **Redis** — cache distribuído do catálogo
+- **Elasticsearch** — busca textual com tolerância a erros
 - **MassTransit** + RabbitMQ (mensageria)
 - **MediatR** (CQRS)
 - **prometheus-net** (métricas)
@@ -38,6 +39,7 @@ src/
 | POST | `/api/games/{id}/acquire` | Autenticado | Adquire jogo e publica `OrderPlacedEvent` |
 | GET | `/api/games/{id}/reviews` | Pública | Lista as avaliações do jogo |
 | POST | `/api/games/{id}/reviews` | Autenticado | Avalia o jogo (nota 1–5, comentário e tags) |
+| GET | `/api/games/search?q=termo` | Pública | Busca textual tolerante a erros de digitação |
 | GET | `/metrics` | Pública | Métricas no formato Prometheus |
 
 ## Eventos
@@ -61,6 +63,8 @@ src/
 | `ConnectionStrings__Redis` | Servidor Redis usado como cache | `localhost:6379` |
 | `MongoDb__ConnectionString` | Servidor MongoDB das avaliações | `mongodb://localhost:27017` |
 | `MongoDb__Database` | Banco das avaliações | `FCG_CatalogDB` |
+| `Elasticsearch__Uri` | Endereço do Elasticsearch | `http://localhost:9200` |
+| `Elasticsearch__IndexName` | Nome do índice de jogos | `fcg-games` |
 
 
 ## Persistência poliglota
@@ -78,6 +82,37 @@ Uma requisição a `GET /api/games` combina as três: o SQL Server devolve os jo
 O cache é invalidado automaticamente sempre que algo altera o catálogo — criar ou editar jogo, aplicar desconto, desativar ou registrar uma nova avaliação —, garantindo que a resposta nunca fique defasada.
 
 Se o Redis estiver indisponível, a requisição segue para o banco em vez de falhar.
+
+
+## Busca avançada
+
+O endpoint `/api/games/search` usa **Elasticsearch**, independente da consulta ao banco relacional.
+
+```
+GET /api/games/search?q=wicher
+```
+
+Retorna *The Witcher 3* mesmo com o erro de digitação.
+
+| Recurso | Como funciona |
+|---|---|
+| **Fuzzy search** | `Fuzziness.AUTO` — a tolerância a erro é proporcional ao tamanho da palavra |
+| **Relevância** | O título pesa três vezes mais que a descrição (`title^3`); resultados vêm ordenados pelo maior score |
+| **Filtro** | Jogos desativados não aparecem nos resultados |
+| **Limite** | Parâmetro `size`, de 1 a 50 (padrão 20) |
+
+### Sincronização do índice
+
+O banco relacional continua sendo a fonte da verdade — o índice é uma cópia otimizada para leitura. Toda escrita no catálogo o mantém atualizado:
+
+| Operação | Efeito no índice |
+|---|---|
+| Criar jogo | Indexa |
+| Editar jogo | Reindexa |
+| Aplicar desconto | Reindexa (o preço final mudou) |
+| Desativar jogo | Remove |
+
+Se o Elasticsearch estiver indisponível, a operação de negócio não falha: o erro é registrado e o fluxo segue. O índice é recriado automaticamente na inicialização, caso não exista.
 
 ## Observabilidade
 
