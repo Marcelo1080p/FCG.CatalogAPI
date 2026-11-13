@@ -1,0 +1,92 @@
+name: CI/CD
+
+# Toda alteracao na branch principal passa por build, testes, analise de
+# vulnerabilidades e vai para producao sem interrupcao de servico.
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+env:
+  IMAGEM: fcg-catalogapi
+  DEPLOYMENT: catalogapi
+  PROJETO_TESTES: tests/FCG.CatalogAPI.Tests/FCG.CatalogAPI.Tests.csproj
+
+jobs:
+  build-e-testes:
+    name: Build e testes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configura o .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restaura dependencias
+        run: dotnet restore
+
+      - name: Compila
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Executa os testes unitarios
+        run: dotnet test ${{ env.PROJETO_TESTES }} --configuration Release --no-build --verbosity normal
+
+  publicar-e-implantar:
+    name: Publica a imagem e implanta
+    runs-on: ubuntu-latest
+    needs: build-e-testes
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Autentica no registry
+        # Credenciais ficam nos secrets do repositorio: nada sensivel versionado.
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.ACR_NAME }}.azurecr.io
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Constroi a imagem
+        # A tag e o SHA do commit: identifica exatamente qual codigo esta
+        # em producao e permite voltar a uma versao anterior.
+        run: |
+          REGISTRY="${{ secrets.ACR_NAME }}.azurecr.io"
+          docker build             -t "$REGISTRY/${{ env.IMAGEM }}:${{ github.sha }}"             -t "$REGISTRY/${{ env.IMAGEM }}:latest" .
+
+      - name: Analisa vulnerabilidades da imagem
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGEM }}:${{ github.sha }}
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: '0'
+
+      - name: Envia a imagem para o registry
+        run: |
+          REGISTRY="${{ secrets.ACR_NAME }}.azurecr.io"
+          docker push "$REGISTRY/${{ env.IMAGEM }}:${{ github.sha }}"
+          docker push "$REGISTRY/${{ env.IMAGEM }}:latest"
+
+      - name: Conecta ao cluster
+        # O kubeconfig do AKS vem de um secret, decodificado apenas em memoria
+        # do runner e descartado ao fim do job.
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+          kubectl get nodes
+
+      - name: Atualiza producao sem downtime
+        # O deployment usa maxUnavailable 0 e maxSurge 1: o pod novo sobe e
+        # so entao o antigo e encerrado.
+        run: |
+          kubectl set image deployment/${{ env.DEPLOYMENT }}             ${{ env.DEPLOYMENT }}=${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGEM }}:${{ github.sha }}
+          kubectl rollout status deployment/${{ env.DEPLOYMENT }} --timeout=300s
+
+      - name: Confirma a versao implantada
+        run: |
+          kubectl get deployment ${{ env.DEPLOYMENT }}             -o jsonpath='{.spec.template.spec.containers[0].image}'
+          echo ""
+          kubectl get pods -l app=${{ env.DEPLOYMENT }}

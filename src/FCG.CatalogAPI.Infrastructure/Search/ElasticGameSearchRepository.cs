@@ -28,10 +28,19 @@ public class ElasticGameSearchRepository : IGameSearchRepository
         {
             var document = GameDocument.FromEntity(game);
 
-            await _client.IndexAsync(
+            var resposta = await _client.IndexAsync(
                 document,
                 i => i.Index(_indexName).Id(document.Id),
                 cancellationToken);
+
+            // O cliente nao lanca excecao em erro: a falha vem na resposta.
+            if (!resposta.IsValidResponse)
+            {
+                _logger.LogWarning(
+                    "[Busca] Elasticsearch recusou a indexacao de {GameId}: {Erro}",
+                    game.Id, resposta.DebugInformation);
+                return;
+            }
 
             _logger.LogInformation("[Busca] Jogo indexado — {Title} ({GameId})", game.Title, game.Id);
         }
@@ -47,9 +56,18 @@ public class ElasticGameSearchRepository : IGameSearchRepository
     {
         try
         {
-            await _client.DeleteAsync(
+            var resposta = await _client.DeleteAsync(
                 new DeleteRequest(_indexName, new Id(gameId.ToString())),
                 cancellationToken);
+
+            if (!resposta.IsValidResponse)
+            {
+                _logger.LogWarning(
+                    "[Busca] Elasticsearch recusou a remocao de {GameId}: {Erro}",
+                    gameId, resposta.DebugInformation);
+                return;
+            }
+
             _logger.LogInformation("[Busca] Jogo removido do indice — {GameId}", gameId);
         }
         catch (Exception ex)
@@ -85,7 +103,9 @@ public class ElasticGameSearchRepository : IGameSearchRepository
 
             if (!response.IsValidResponse)
             {
-                _logger.LogWarning("[Busca] Consulta rejeitada pelo Elasticsearch — termo: {Term}", term);
+                _logger.LogWarning(
+                    "[Busca] Consulta rejeitada pelo Elasticsearch — termo: {Term}. {Erro}",
+                    term, response.DebugInformation);
                 return new List<GameSearchHit>();
             }
 
@@ -112,26 +132,48 @@ public class ElasticGameSearchRepository : IGameSearchRepository
     /// </summary>
     public async Task EnsureIndexAsync(CancellationToken cancellationToken = default)
     {
-        try
+        // Em um cluster, a aplicacao pode subir antes do Elasticsearch estar
+        // pronto. Tenta algumas vezes antes de desistir.
+        for (var tentativa = 1; tentativa <= 10; tentativa++)
         {
-            var exists = await _client.Indices.ExistsAsync(_indexName, cancellationToken);
-            if (exists.Exists)
-                return;
+            try
+            {
+                var exists = await _client.Indices.ExistsAsync(_indexName, cancellationToken);
+                if (exists.Exists)
+                {
+                    _logger.LogInformation("[Busca] Indice '{Index}' ja existe.", _indexName);
+                    return;
+                }
 
-            await _client.Indices.CreateAsync<GameDocument>(_indexName, c => c
-                .Mappings(m => m
-                    .Properties(p => p
-                        .Keyword(k => k.Id)
-                        .Text(t => t.Title)
-                        .Text(t => t.Description)
-                        .Boolean(b => b.IsActive))),
-                cancellationToken);
+                var criacao = await _client.Indices.CreateAsync<GameDocument>(_indexName, c => c
+                    .Mappings(m => m
+                        .Properties(p => p
+                            .Keyword(k => k.Id)
+                            .Text(t => t.Title)
+                            .Text(t => t.Description)
+                            .Boolean(b => b.IsActive))),
+                    cancellationToken);
 
-            _logger.LogInformation("[Busca] Indice '{Index}' criado.", _indexName);
+                if (criacao.IsValidResponse)
+                {
+                    _logger.LogInformation("[Busca] Indice '{Index}' criado.", _indexName);
+                    return;
+                }
+
+                _logger.LogWarning(
+                    "[Busca] Tentativa {Tentativa} de preparar o indice falhou: {Erro}",
+                    tentativa, criacao.DebugInformation);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    "[Busca] Tentativa {Tentativa}: Elasticsearch indisponivel ({Mensagem})",
+                    tentativa, ex.Message);
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
         }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "[Busca] Falha ao preparar o indice '{Index}'", _indexName);
-        }
+
+        _logger.LogError("[Busca] Nao foi possivel preparar o indice '{Index}'.", _indexName);
     }
 }
